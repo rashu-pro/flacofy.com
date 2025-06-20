@@ -2,8 +2,12 @@
 /**
  * Template Name: verify otp
  */
-session_start();
-require 'config.php';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+//require 'config.php';
+
+global $wpdb;
 
 $error = '';
 $success = '';
@@ -12,7 +16,7 @@ $max_attempts = 3; // Maximum allowed attempts
 
 // Registration or Forgot Password Flow
 if (!isset($_SESSION['reg_data']) && !isset($_SESSION['reset_contact'])) {
-    header("Location: /");
+    wp_redirect(home_url('/'));
     exit();
 }
 
@@ -26,126 +30,94 @@ if (isset($_SESSION['reg_data'])) {
     $contact_type = filter_var($contact, FILTER_VALIDATE_EMAIL) ? 'email' : 'phone';
 }
 
-// ✅ Get last_sent_at, attempts and calculate cooldown
-$cooldown_stmt = $conn->prepare("SELECT last_sent_at, attempts FROM otps WHERE $contact_type = ? ORDER BY last_sent_at DESC LIMIT 1");
-$cooldown_stmt->bind_param("s", $contact);
-$cooldown_stmt->execute();
-$cooldown_stmt->store_result();
-$cooldown_stmt->bind_result($last_sent_at, $attempts);
-if ($cooldown_stmt->num_rows > 0) {
-    $cooldown_stmt->fetch();
-    $last_sent = strtotime($last_sent_at);
-    $now = time();
-    $cooldown_seconds = max(0, 60 - ($now - $last_sent));
-}
-$cooldown_stmt->close();
-
 // ✅ Resend OTP logic
 if (isset($_POST['resend']) && $cooldown_seconds === 0) {
-    $new_otp = rand(100000, 999999);
-    $hashed_otp = hash('sha256', $new_otp);
-    $expires_at = date('Y-m-d H:i:s', time() + 60);
-
-    $delete_stmt = $conn->prepare("DELETE FROM otps WHERE $contact_type = ?");
-    $delete_stmt->bind_param("s", $contact);
-    $delete_stmt->execute();
-    $delete_stmt->close();
-
-    $insert_stmt = $conn->prepare("INSERT INTO otps ($contact_type, otp_code, expires_at, verified, attempts, last_sent_at) VALUES (?, ?, ?, 0, 0, NOW())");
-    $insert_stmt->bind_param("sss", $contact, $hashed_otp, $expires_at);
-    if ($insert_stmt->execute()) {
-        // Send OTP (not hash!) to user
-        if ($contact_type === 'email') {
-            require 'send_email_otp.php';
-            sendEmailOtp($contact, $new_otp);
-        } else {
-            require 'send_sms_otp.php';
-            sendSmsOtp($contact, $new_otp);
-        }
-
-        $success = "A new OTP has been sent to your $contact_type.";
-        $cooldown_seconds = 60;
-    } else {
-        $error = "Failed to resend OTP.";
-    }
-    $insert_stmt->close();
+    // resend otp login here
 }
 
 // ✅ OTP verification logic
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify'])) {
-    $entered_otp = trim($_POST['otp']);
+    $is_email = filter_var($contact, FILTER_VALIDATE_EMAIL);
+    $user_otp = trim($_POST['otp']);
 
-    $stmt = $conn->prepare("SELECT id, otp_code, expires_at, attempts FROM otps WHERE $contact_type = ? ORDER BY id DESC LIMIT 1");
-    $stmt->bind_param("s", $contact);
-    $stmt->execute();
-    $stmt->store_result();
-    $stmt->bind_result($otp_id, $otp_code, $expires_at, $attempts);
+    // Retrieve session data
+    $reg_data = $_SESSION['reg_data'] ?? null;
 
-    if ($stmt->num_rows === 1) {
-        $stmt->fetch();
-
-        if ($attempts >= $max_attempts) {
-            $error = "Maximum attempts reached. Please try again later.";
-        } else {
-            if (hash('sha256', $entered_otp) === $otp_code && strtotime($expires_at) > time()) {
-
-                // ✅ Mark OTP as verified
-                $update_stmt = $conn->prepare("UPDATE otps SET verified = 1 WHERE id = ?");
-                $update_stmt->bind_param("i", $otp_id);
-                $update_stmt->execute();
-                $update_stmt->close();
-
-                // ✅ Delete the OTP entry after successful verification
-                $delete_otp_stmt = $conn->prepare("DELETE FROM otps WHERE id = ?");
-                $delete_otp_stmt->bind_param("i", $otp_id);
-                $delete_otp_stmt->execute();
-                $delete_otp_stmt->close();
-
-                if (isset($_SESSION['reg_data'])) {
-                    $data = $_SESSION['reg_data'];
-                    $full_name = $data['full_name'];
-                    $password = $data['password'];
-                    $verified = 1;
-                    $created_at = date('Y-m-d H:i:s');
-                    $email = ($contact_type === 'email') ? $contact : null;
-                    $phone = ($contact_type === 'phone') ? $contact : null;
-
-                    $stmt_insert = $conn->prepare("INSERT INTO users (full_name, phone, email, password, verified, created_at) VALUES (?, ?, ?, ?, ?, ?)");
-                    $stmt_insert->bind_param("ssssis", $full_name, $phone, $email, $password, $verified, $created_at);
-
-                    if ($stmt_insert->execute()) {
-                        unset($_SESSION['reg_data']);
-
-                        // ✅ Smart redirect logic (except login/register pages)
-                        $redirect_url = $_SESSION['redirect_url'] ?? '/';
-                        if (!str_contains($redirect_url, 'login') && !str_contains($redirect_url, 'register')) {
-                            header("Location: $redirect_url");
-                        } else {
-                            header("Location: /");
-                        }
-                        exit();
-                    } else {
-                        $error = "Registration failed. Try again.";
-                    }
-                } else {
-                    $_SESSION['otp_verified'] = true;
-                    header("Location: https://flacofy.com/reset-password/");
-                    exit();
-                }
-            } else {
-                $attempts++;
-                $update_attempts_stmt = $conn->prepare("UPDATE otps SET attempts = ? WHERE id = ?");
-                $update_attempts_stmt->bind_param("ii", $attempts, $otp_id);
-                $update_attempts_stmt->execute();
-                $update_attempts_stmt->close();
-
-                $error = "Invalid or expired OTP.";
-            }
-        }
+    if (!$reg_data) {
+        $error = "Session expired. Please register again.";
     } else {
-        $error = "No OTP found for this contact.";
+        $full_name    = sanitize_text_field($reg_data['full_name']);
+        $contact      = sanitize_text_field($reg_data['contact']);
+        $contact_type = $reg_data['contact_type']; // 'email' or 'phone'
+        $password     = $reg_data['password']; // already hashed
+
+        // Check OTP from database
+        $table_name = $wpdb->prefix . 'reg_system_otps';
+
+        if (in_array($contact_type, ['email', 'phone'])) {
+            $row = $wpdb->get_row(
+                $wpdb->prepare(
+                    "SELECT otp_code, expires_at FROM $table_name WHERE $contact_type = %s ORDER BY id DESC LIMIT 1",
+                    $contact
+                )
+            );
+
+            if (!$row) {
+                $error = "OTP not found. Please try registering again.";
+            } elseif ($row->otp_code !== $user_otp) {
+                $error = "Incorrect OTP. Please try again.";
+            } elseif (strtotime($row->expires_at) < time()) {
+                $error = "OTP has expired. Please register again.";
+            } else {
+                // ✅ Create WordPress user
+                $username = $is_email ? explode('@', $contact)[0] : 'user_' . wp_generate_password(4, false);
+                $email    = $contact_type === 'email' ? $contact : $username . '@example.com';
+
+                // Ensure username and email are unique
+                $username = wp_unique_username($username);
+                $email    = wp_unique_email($email);
+
+                $user_id = wp_insert_user([
+                    'user_login' => $username,
+                    'user_pass'  => $password,
+                    'user_email' => $email,
+                    'display_name' => $full_name,
+                    'first_name' => $full_name
+                ]);
+
+                if (is_wp_error($user_id)) {
+                    $error = "Failed to create account: " . $user_id->get_error_message();
+                } else {
+                    // Save phone as user meta if needed
+                    if ($contact_type === 'phone') {
+                        update_user_meta($user_id, 'phone', $contact);
+                    }
+
+                    // Cleanup
+                    $wpdb->delete($table_name, [ $contact_type => $contact ]);
+                    unset($_SESSION['reg_data']);
+
+                    $success = "Account created successfully!";
+                    // You can auto-login user here or redirect
+                    // Log in the user
+                    $user = get_user_by('id', $user_id);
+                    wp_set_current_user($user_id);
+                    wp_set_auth_cookie($user_id);
+                    do_action('wp_login', $user->user_login, $user);
+                    wp_redirect(home_url('/my-account'));
+                }
+            }
+        } else {
+            $error = "Invalid contact type.";
+        }
     }
-    $stmt->close();
+
+    // Show messages
+    if (!empty($error)) {
+        echo '<div class="error-message">' . esc_html($error) . '</div>';
+    } elseif (!empty($success)) {
+        echo '<div class="success-message">' . esc_html($success) . '</div>';
+    }
 }
 ?>
 
@@ -216,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify'])) {
             color: #aaa;
             cursor: not-allowed;
         }
-        
+
         /* Responsive tweak for mobile/tablet */
         @media (max-width: 768px) {
             body {
@@ -228,22 +200,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify'])) {
                 margin-top: 20px;
             }
         }
-        
+
         /* Responsive alert box size for mobile/tablet */
         @media (max-width: 768px) {
-        .alert {
-        padding: 0.4rem 0.8rem;
-        font-size: 0.85rem;
-        margin-bottom: 0.8rem;
-           }
+            .alert {
+                padding: 0.4rem 0.8rem;
+                font-size: 0.85rem;
+                margin-bottom: 0.8rem;
+            }
         }
-        
+
     </style>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // OTP input auto-focus and navigation
             const otpInputs = document.querySelectorAll('.otp-input');
-            
+
             otpInputs.forEach((input, index) => {
                 // Handle input navigation
                 input.addEventListener('input', (e) => {
@@ -253,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify'])) {
                         }
                     }
                 });
-                
+
                 // Handle backspace
                 input.addEventListener('keydown', (e) => {
                     if (e.key === 'Backspace' && input.value.length === 0 && index > 0) {
@@ -297,40 +269,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify'])) {
     </script>
 </head>
 <body>
-    <div class="otp-container">
-        <h2 class="otp-title">OTP Verify</h2>
-        <p class="otp-message">Please enter the 6-digit code sent to<br><strong><?= htmlspecialchars($contact) ?></strong></p>
+<div class="otp-container">
+    <h2 class="otp-title">OTP Verify</h2>
+    <p class="otp-message">Please enter the 6-digit code sent to<br><strong><?= htmlspecialchars($contact) ?></strong></p>
 
-        <?php if ($error): ?>
-            <div class="alert alert-danger"><?= $error ?></div>
-        <?php endif; ?>
-        <?php if ($success): ?>
-            <div class="alert alert-success"><?= $success ?></div>
-        <?php endif; ?>
+    <?php if ($error): ?>
+        <div class="alert alert-danger"><?= $error ?></div>
+    <?php endif; ?>
+    <?php if ($success): ?>
+        <div class="alert alert-success"><?= $success ?></div>
+    <?php endif; ?>
 
-        <form method="POST" id="otpForm">
-            <input type="hidden" name="otp" id="otp">
-            
-            <div class="otp-inputs">
-                <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" autofocus required>
-                <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-            </div>
-            
-            <button type="submit" name="verify" class="btn btn-primary btn-submit">Submit</button>
-        </form>
+    <form method="POST" id="otpForm">
+        <input type="hidden" name="otp" id="otp">
 
-        <div class="resend-container">
-            <?php if ($cooldown_seconds > 0): ?>
-                <p>Resend code in <span id="timer">0:<?= str_pad($cooldown_seconds, 2, '0', STR_PAD_LEFT) ?></span></p>
-            <?php endif; ?>
-            <form method="POST">
-                <button type="submit" name="resend" id="resendBtn" <?= $cooldown_seconds > 0 ? 'disabled' : '' ?>>Resend OTP</button>
-            </form>
+        <div class="otp-inputs">
+            <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" autofocus required>
+            <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+            <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+            <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+            <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+            <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
         </div>
+
+        <button type="submit" name="verify" class="btn btn-primary btn-submit">Submit</button>
+    </form>
+
+    <div class="resend-container">
+        <?php if ($cooldown_seconds > 0): ?>
+            <p>Resend code in <span id="timer">0:<?= str_pad($cooldown_seconds, 2, '0', STR_PAD_LEFT) ?></span></p>
+        <?php endif; ?>
+        <form method="POST">
+            <button type="submit" name="resend" id="resendBtn" <?= $cooldown_seconds > 0 ? 'disabled' : '' ?>>Resend OTP</button>
+        </form>
     </div>
+</div>
 </body>
 </html>

@@ -2,16 +2,90 @@
 /**
  * Template Name: Registration
  */
-session_start();
-require 'config.php';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+//require 'config.php';
 
 date_default_timezone_set('Asia/Dhaka'); // ✅ টাইমজোন সেট করলাম বাংলাদেশে
 
+global $wpdb;
 // Generate CSRF token
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 $csrf_token = $_SESSION['csrf_token'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        $error = "Security validation failed. Please try again.";
+    } else {
+        $full_name = sanitize_text_field($_POST['full_name']);
+        $contact = trim($_POST['contact']);
+        $password = trim($_POST['password']);
+        $confirm_password = trim($_POST['confirm_password']);
+
+        $error = null;
+
+        if (empty($full_name) || empty($contact) || empty($password)) {
+            $error = "All fields are required!";
+        } elseif (strlen($password) < 6) {
+            $error = "Password must be at least 6 characters!";
+        } elseif ($password !== $confirm_password) {
+            $error = "Passwords do not match!";
+        } else {
+            $is_phone = preg_match('/^01[3-9]\d{8}$/', $contact);
+            $is_email = filter_var($contact, FILTER_VALIDATE_EMAIL);
+
+            if (!$is_phone && !$is_email) {
+                $error = "Invalid phone number or email address!";
+            } else {
+                // Generate OTP and expiration time
+                $otp = random_int(100000, 999999);
+                $expires_at = current_time('mysql', 1); // GMT
+                $expires_at = date('Y-m-d H:i:s', strtotime($expires_at) + 300); // +5 mins
+
+                $field = $is_phone ? 'phone' : 'email';
+                $table_name = $wpdb->prefix . 'reg_system_otps';
+
+                // Clean up old OTPs
+                if (in_array($field, ['phone', 'email'])) {
+                    $wpdb->delete($table_name, [$field => $contact]);
+                }
+
+                // Save new OTP
+                $wpdb->insert(
+                    $table_name,
+                    [
+                        $field => $contact,
+                        'otp_code' => $otp,
+                        'expires_at' => $expires_at
+                    ],
+                    ['%s', '%s', '%s']
+                );
+
+                // Store registration data in session
+                $_SESSION['reg_data'] = [
+                    'full_name'     => $full_name,
+                    'contact'       => $contact,
+                    'contact_type'  => $field,
+                    'password'      => password_hash($password, PASSWORD_DEFAULT)
+                ];
+
+                // Send OTP
+                if ($is_email) {
+                    require_once 'send_email_otp.php';
+                    sendEmailOtp($contact, $otp);
+                } else {
+                    send_otp_to_phone($contact, $otp);
+                }
+
+                // Redirect to OTP verification page
+                wp_redirect(home_url('/otp-verification/'));
+                exit;
+            }
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -203,97 +277,8 @@ $csrf_token = $_SESSION['csrf_token'];
             <h2><strong>SIGN UP</strong></h2>
         </div>
 
-        <?php
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-                $error = "Security validation failed. Please try again.";
-            } else {
-                $full_name = htmlspecialchars(trim($_POST['full_name']));
-                $contact = htmlspecialchars(trim($_POST['contact']));
-                $password = trim($_POST['password']);
-                $confirm_password = trim($_POST['confirm_password']);
-
-                $error = null;
-
-                if (empty($full_name) || empty($contact) || empty($password) || empty($confirm_password)) {
-                    $error = "All fields are required!";
-                } elseif (strlen($password) < 6) {
-                    $error = "Password must be at least 6 characters!";
-                } elseif ($password !== $confirm_password) {
-                    $error = "Passwords do not match!";
-                } else {
-                    $is_phone = preg_match('/^01[3-9]\d{8}$/', $contact);
-                    $is_email = filter_var($contact, FILTER_VALIDATE_EMAIL);
-
-                    if (!$is_phone && !$is_email) {
-                        $error = "Invalid phone number or email address!";
-                    } else {
-                        $field = $is_phone ? 'phone' : 'email';
-
-                        $checkStmt = $conn->prepare("SELECT id FROM users WHERE phone = ? OR email = ?");
-                        $checkStmt->bind_param("ss", $contact, $contact);
-                        $checkStmt->execute();
-                        $checkStmt->store_result();
-
-                        if ($checkStmt->num_rows > 0) {
-                            $error = "Contact already registered!";
-                        } else {
-                            $otp = random_int(100000, 999999); // ✅ আসল OTP
-                            $hashed_otp = hash('sha256', $otp); // ✅ হ্যাশ করলাম DB-র জন্য
-                            $expires_at = date('Y-m-d H:i:s', time() + 60);
-
-                            $deleteStmt = $conn->prepare("DELETE FROM otps WHERE $field = ?");
-                            $deleteStmt->bind_param("s", $contact);
-                            $deleteStmt->execute();
-                            $deleteStmt->close();
-
-                            $insertStmt = $conn->prepare("INSERT INTO otps ($field, otp_code, expires_at) VALUES (?, ?, ?)");
-                            $insertStmt->bind_param("sss", $contact, $hashed_otp, $expires_at);
-
-
-                            if ($insertStmt->execute()) {
-                        // 🧼 Clean previous forgot password session
-                                unset($_SESSION['reset_contact']);
-                                unset($_SESSION['otp_flow']); // optional, if you're using it
-
-                        // ✅ Now set reg_data session for registration
-                               $_SESSION['reg_data'] = [
-                                'full_name' => $full_name,
-                                'contact' => $contact,
-                                'contact_type' => $field,
-                                'password' => password_hash($password, PASSWORD_DEFAULT)
-                            ];
-
-
-                                if ($is_email) {
-                                    require 'send_email_otp.php';
-                                    sendEmailOtp($contact, $otp);
-                                } else {
-                                    require 'send_sms_otp.php';
-                                    sendSmsOtp($contact, $otp);
-                                }
-                        // Store the contact information and OTP flow type
-                           $_SESSION['contact'] = $contact;
-                           $_SESSION['otp_flow'] = 'registration'; // Registration flow
-
-                        // Redirect to OTP verification page
-                        header("Location: https://flacofy.com/otp-verification/");
-                        exit(); 
-
-                            } else {
-                                $error = "Error generating OTP!";
-                            }
-                            $insertStmt->close();
-                        }
-                        $checkStmt->close();
-                    }
-                }
-            }
-        }
-        ?>
-
         <?php if (!empty($error)): ?>
-            <div class="error"><?= htmlspecialchars($error) ?></div>
+            <div class="error"><?= esc_html($error) ?></div>
         <?php endif; ?>
 
         <form method="POST">
@@ -351,7 +336,7 @@ function checkPasswordMatch() {
     const password = document.getElementById('password').value;
     const confirmPassword = document.getElementById('confirm_password').value;
     const matchElement = document.getElementById('password-match');
-    
+
     if (confirmPassword.length === 0) {
         matchElement.textContent = '';
         matchElement.className = 'password-match';

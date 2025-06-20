@@ -2,9 +2,9 @@
 session_start();
 
 $host = 'localhost';
-$dbname = 'afaicxzm_wp182';
-$username = 'afaicxzm_wp182';
-$password = 'S@-2epQ605';
+$dbname = 'flacofy.com';
+$username = 'root';
+$password = '';
 
 $conn = new mysqli($host, $username, $password, $dbname);
 if ($conn->connect_error) {

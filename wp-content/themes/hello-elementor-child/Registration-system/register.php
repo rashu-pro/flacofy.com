@@ -39,53 +39,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$is_phone && !$is_email) {
                 $error = "Invalid phone number or email address!";
             } else {
-                // Generate OTP and expiration time
-                $otp = random_int(100000, 999999);
-                $expires_at = current_time('mysql', 1); // GMT
-                $expires_at = date('Y-m-d H:i:s', strtotime($expires_at) + 300); // +5 mins
 
-                $field = $is_phone ? 'phone' : 'email';
-                $table_name = $wpdb->prefix . 'reg_system_otps';
-
-                // Clean up old OTPs
-                if (in_array($field, ['phone', 'email'])) {
-                    $wpdb->delete($table_name, [$field => $contact]);
-                }
-
-                // Save new OTP
-                $wpdb->insert(
-                    $table_name,
-                    [
-                        $field => $contact,
-                        'otp_code' => $otp,
-                        'expires_at' => $expires_at
-                    ],
-                    ['%s', '%s', '%s']
-                );
-
-                // Store registration data in session
-                $_SESSION['reg_data'] = [
-                    'full_name'     => $full_name,
-                    'contact'       => $contact,
-                    'contact_type'  => $field,
-                    'password'      => password_hash($password, PASSWORD_DEFAULT)
-                ];
-
-                // Send OTP
-                if ($is_email) {
-                    require_once 'send_email_otp.php';
-                    sendEmailOtp($contact, $otp);
+                if (username_exists($contact)) {
+                    $error = "An account with this contact <strong>(" .$contact. ")</strong> already exists. Please try with another phone number or email.";
                 } else {
-                    send_otp_to_phone($contact, $otp);
-                }
+                    // Generate OTP and expiration time
+                    $otp = random_int(100000, 999999);
+                    $expires_at = current_time('mysql', 1); // GMT
+                    $expires_at = date('Y-m-d H:i:s', strtotime($expires_at) + 300); // +5 mins
 
-                // Redirect to OTP verification page
-                wp_redirect(home_url('/otp-verification/'));
-                exit;
+                    $field = $is_phone ? 'phone' : 'email';
+                    $table_name = $wpdb->prefix . 'reg_system_otps';
+
+                    // Clean up old OTPs
+                    if (in_array($field, ['phone', 'email'])) {
+                        $wpdb->delete($table_name, [$field => $contact]);
+                    }
+
+                    // Save new OTP
+                    $wpdb->insert(
+                        $table_name,
+                        [
+                            $field => $contact,
+                            'otp_code' => $otp,
+                            'expires_at' => $expires_at
+                        ],
+                        ['%s', '%s', '%s']
+                    );
+
+                    // Store registration data in session
+                    $_SESSION['reg_data'] = [
+                        'full_name'     => $full_name,
+                        'contact'       => $contact,
+                        'contact_type'  => $field,
+                        'password'      => password_hash($password, PASSWORD_DEFAULT)
+                    ];
+
+                    // Send OTP
+                    if ($is_email) {
+                        require_once 'send_email_otp.php';
+                        sendEmailOtp($contact, $otp);
+                    } else {
+                        send_otp_to_phone($contact, $otp);
+                    }
+
+                    // Redirect to OTP verification page
+                    wp_redirect(home_url('/otp-verification/'));
+                    exit;
+                }
             }
         }
     }
 }
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -278,7 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <?php if (!empty($error)): ?>
-            <div class="error"><?= esc_html($error) ?></div>
+            <div class="alert alert-danger"><?= $error ?></div>
         <?php endif; ?>
 
         <form method="POST">

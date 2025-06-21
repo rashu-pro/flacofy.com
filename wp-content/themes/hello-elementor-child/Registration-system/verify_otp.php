@@ -69,7 +69,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify'])) {
             } elseif (strtotime($row->expires_at) < time()) {
                 $error = "OTP has expired. Please register again.";
             } else {
-                $user_exists = false;
                 // ✅ Create WordPress user
                 $username = $contact;
                 $email    = $contact_type === 'email' ? $contact : 'phone_'.$username . '@example.com';
@@ -84,9 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify'])) {
 
                 if (is_wp_error($user_id)) {
                     $error = "Failed to create account: " . $user_id->get_error_message();
-                    if(array_key_exists('existing_user_login', $user_id->errors)){
-                        $user_exists = true;
-                    }
                 } else {
                     // Save phone as user meta if needed
                     if ($contact_type === 'phone') {
@@ -120,7 +116,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify'])) {
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>

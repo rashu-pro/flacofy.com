@@ -5,9 +5,9 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-//require 'config.php';
 
-date_default_timezone_set('Asia/Dhaka'); // ✅ টাইমজোন সেট করলাম বাংলাদেশে
+// ✅ টাইমজোন সেট করলাম বাংলাদেশে
+date_default_timezone_set('Asia/Dhaka');
 
 global $wpdb;
 // Generate CSRF token
@@ -72,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'full_name'     => $full_name,
                         'contact'       => $contact,
                         'contact_type'  => $field,
-                        'password'      => password_hash($password, PASSWORD_DEFAULT)
+                        'password'      => $password
                     ];
 
                     // Send OTP

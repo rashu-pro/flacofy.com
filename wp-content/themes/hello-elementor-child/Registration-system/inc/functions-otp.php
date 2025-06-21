@@ -3,7 +3,8 @@
  * Creates an reg_system_otps table if not exists
  * @return string[]
  */
-function create_otp_table_if_not_exists(){
+function create_otp_table_if_not_exists()
+{
     global $wpdb;
 
     $table_name = $wpdb->prefix . 'reg_system_otps';
@@ -32,20 +33,21 @@ function create_otp_table_if_not_exists(){
  * @param $otp
  * @return false|string
  */
-function send_otp_to_phone($phone, $otp) {
+function send_otp_to_phone($phone, $otp)
+{
     $response = wp_remote_post('http://portal.khudebarta.com:3775/sendtext', [
-        'method'    => 'POST',
-        'headers'   => [
+        'method' => 'POST',
+        'headers' => [
             'Content-Type' => 'application/json',
         ],
-        'body'      => json_encode([
-            'apikey'        => '299901d82f606e24',
-            'secretkey'     => '3769af17',
-            'callerID'      => 'FLACOFY',
-            'toUser'        => '+88'.$phone,
-            'messageContent'=> 'Your OTP code is: '.$otp,
+        'body' => json_encode([
+            'apikey' => '299901d82f606e24',
+            'secretkey' => '3769af17',
+            'callerID' => 'FLACOFY',
+            'toUser' => '+88' . $phone,
+            'messageContent' => 'Your OTP code is: ' . $otp,
         ]),
-        'timeout'   => 15,
+        'timeout' => 15,
     ]);
 
     if (is_wp_error($response)) {

@@ -2,14 +2,15 @@
 /**
  * Template Name: Login
  */
-session_start();
-require 'config.php';
 
-// Generate CSRF token
-if (empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+// Handle login if form was submitted
+$login_result = handle_custom_login();
+
+// Check if user is already logged in
+if (is_user_logged_in()) {
+    echo '<div class="login-message success">You are already logged in. <p></p>Go to my account page: <a href="' . home_url('/my-account/') . '">My Account</a></p></div>';
+    return;
 }
-$csrf_token = $_SESSION['csrf_token'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -232,60 +233,24 @@ $csrf_token = $_SESSION['csrf_token'];
             <h2><strong>Login</strong></h2>
         </div>
 
-        <?php
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-                $error = "Security validation failed. Please try again.";
-            } else {
-                $contact = htmlspecialchars(trim($_POST['contact']));
-                $password = trim($_POST['password']);
-
-                $error = null;
-
-                if (empty($contact) || empty($password)) {
-                    $error = "All fields are required!";
-                } else {
-                    $is_phone = preg_match('/^01[3-9]\d{8}$/', $contact);
-                    $is_email = filter_var($contact, FILTER_VALIDATE_EMAIL);
-
-                    if (!$is_phone && !$is_email) {
-                        $error = "Invalid phone number or email address!";
-                    } else {
-                        $checkStmt = $conn->prepare("SELECT id, password FROM users WHERE phone = ? OR email = ?");
-                        $checkStmt->bind_param("ss", $contact, $contact);
-                        $checkStmt->execute();
-                        $checkStmt->store_result();
-
-                        if ($checkStmt->num_rows === 0) {
-                            $error = "No account found with this contact!";
-                        } else {
-                            $checkStmt->bind_result($id, $hashed_password);
-                            $checkStmt->fetch();
-                            if (!password_verify($password, $hashed_password)) {
-                                $error = "Incorrect password!";
-                            } else {
-                                session_regenerate_id(true);
-                                $_SESSION['user_id'] = $id;
-                                header("Location: dashboard.php");
-                                exit();
-                            }
-                        }
-                        $checkStmt->close();
-                    }
-                }
-            }
-        }
-        ?>
-
-        <?php if (!empty($error)): ?>
-            <div class="error"><?= htmlspecialchars($error) ?></div>
+        <?php if (!empty($login_result['error'])): ?>
+            <div class="login-message error">
+                <?php echo esc_html($login_result['error']); ?>
+            </div>
         <?php endif; ?>
 
-        <form method="POST">
-            <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
+        <?php if (!empty($login_result['success'])): ?>
+            <div class="login-message success">
+                <?php echo esc_html($login_result['success']); ?>
+            </div>
+        <?php endif; ?>
+
+        <form method="POST" class="custom-login-form">
+            <?php wp_nonce_field('custom_login_nonce', 'login_nonce'); ?>
 
             <label for="contact">Enter mobile number or email</label>
-            <input type="text" id="contact" name="contact" placeholder="01XXXXXXXXX or email@example.com" required>
+            <input type="text" id="contact" name="username" placeholder="01XXXXXXXXX or email@example.com" value="<?php echo isset($_POST['username']) ? esc_attr($_POST['username']) : ''; ?>"
+                   required>
 
             <label for="password">Password</label>
             <div class="password-wrapper">
@@ -297,16 +262,18 @@ $csrf_token = $_SESSION['csrf_token'];
                 <a href="https://flacofy.com/forget_password/">Forgot Password?</a>
             </div>
 
-            <button type="submit">Login</button>
+            <input type="hidden" name="redirect_to" value="<?php echo esc_url(home_url('/my-account/')); ?>">
+
+            <button type="submit" name="custom_login_submit">Login</button>
 
             <div class="info-text">
                 By continuing, you agree to <a href="#">FLACOFY's Conditions of Use</a> and <a href="#">Privacy Notice</a><br>
                 Need help? <a href="#">Contact Support</a>
             </div>
 
-            <div class="info-text mt-3 text-center">
-                <a href="register.php">Create your FLACOFY account</a>
-            </div>
+            <?php if (get_option('users_can_register')): ?>
+                <a href="<?php echo home_url('/register/') ?>">Create your FLACOFY account</a>
+            <?php endif; ?>
         </form>
     </div>
 </div>

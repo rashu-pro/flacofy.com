@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             display: flex;
             justify-content: center;
             align-items: flex-start;
-            min-height: calc(100vh - 80px);
+            min-height: calc(100vh - 150px);
             padding: 20px 15px 40px;
         }
 
@@ -311,7 +311,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button type="submit">Continue</button>
 
             <div class="info-text mt-2">
-                Already a customer? <a href="#">Sign in instead</a><br>
+                Already a customer? <a href="<?php echo home_url('/login/') ?>">Sign in instead</a><br>
                 By creating an account, you agree to FLACOFY's <a href="#">Conditions of Use</a> and <a href="#">Privacy Notice</a>.
             </div>
         </form>

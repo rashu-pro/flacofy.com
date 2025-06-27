@@ -71,7 +71,7 @@ class WP_Rate_Limiter {
     /**
      * Check if action is rate limited
      */
-    public function is_rate_limited($action_type, $max_attempts = 5, $time_window = 900) { // 15 minutes default
+    public function is_rate_limited($action_type, $max_attempts = 3, $time_window = 300) { // 15 minutes default
         global $wpdb;
 
         $ip = $this->get_client_ip();
@@ -108,7 +108,8 @@ class WP_Rate_Limiter {
             return array(
                 'blocked' => true,
                 'message' => 'Too many attempts. You have been temporarily blocked.',
-                'attempts' => $attempt_count
+                'attempts' => $attempt_count,
+                'remaining_time' => strtotime($blocked_record->blocked_until) - time()
             );
         }
 

@@ -36,6 +36,7 @@ if (is_user_logged_in()) {
             padding: 0px 10px 5px;
             flex-direction: column;
             position: relative;
+            min-height: 86vh;
         }
 
         .page-logo {
@@ -56,14 +57,14 @@ if (is_user_logged_in()) {
             max-width: 380px;
             padding: 25px 20px;
             background-color: #fff;
-            box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
             transition: all 0.3s ease;
             margin: 0 auto;
         }
 
         .login-box:hover {
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
         }
 
         .logo {
@@ -225,13 +226,20 @@ if (is_user_logged_in()) {
 
 <div class="login-wrapper">
     <div class="page-logo">
-        <img src="https://flacofy.com/wp-content/uploads/2025/01/logo.png" alt="FLACOFY Logo">
+        <a href="<?php echo home_url('/') ?>">
+            <img src="https://flacofy.com/wp-content/uploads/2025/01/logo.png" alt="FLACOFY Logo">
+        </a>
     </div>
 
     <div class="login-box">
         <div class="logo">
             <h2><strong>Login</strong></h2>
         </div>
+
+        <?php
+        global $wp_rate_limiter;
+        $rate_check = $wp_rate_limiter->is_rate_limited('login', 3, 60);
+        ?>
 
         <?php if (!empty($login_result['error'])): ?>
             <div class="login-message error">
@@ -249,7 +257,8 @@ if (is_user_logged_in()) {
             <?php wp_nonce_field('custom_login_nonce', 'login_nonce'); ?>
 
             <label for="contact">Enter mobile number or email</label>
-            <input type="text" id="contact" name="username" placeholder="01XXXXXXXXX or email@example.com" value="<?php echo isset($_POST['username']) ? esc_attr($_POST['username']) : ''; ?>"
+            <input type="text" id="contact" name="username" placeholder="01XXXXXXXXX or email@example.com"
+                   value="<?php echo isset($_POST['username']) ? esc_attr($_POST['username']) : ''; ?>"
                    required>
 
             <label for="password">Password</label>
@@ -267,12 +276,15 @@ if (is_user_logged_in()) {
             <button type="submit" name="custom_login_submit">Login</button>
 
             <div class="info-text">
-                By continuing, you agree to <a href="#">FLACOFY's Conditions of Use</a> and <a href="#">Privacy Notice</a><br>
+                By continuing, you agree to <a href="#">FLACOFY's Conditions of Use</a> and <a href="#">Privacy
+                    Notice</a><br>
                 Need help? <a href="#">Contact Support</a>
             </div>
 
             <?php if (get_option('users_can_register')): ?>
-                <a href="<?php echo home_url('/register/') ?>">Create your FLACOFY account</a>
+                <div class="info-text">
+                    <a href="<?php echo home_url('/register/') ?>">Create your FLACOFY account</a>
+                </div>
             <?php endif; ?>
         </form>
     </div>

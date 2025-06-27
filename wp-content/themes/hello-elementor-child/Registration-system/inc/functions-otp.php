@@ -35,17 +35,17 @@ function create_otp_table_if_not_exists()
  */
 function send_otp_to_phone($phone, $otp)
 {
-    $response = wp_remote_post('http://portal.khudebarta.com:3775/sendtext', [
+    $response = wp_remote_post('http://api.icombd.com/api/v2/sendsms/plaintext', [
         'method' => 'POST',
         'headers' => [
             'Content-Type' => 'application/json',
         ],
         'body' => json_encode([
-            'apikey' => '299901d82f606e24',
-            'secretkey' => '3769af17',
-            'callerID' => 'FLACOFY',
-            'toUser' => '+88' . $phone,
-            'messageContent' => 'Your OTP code is: ' . $otp,
+            "username" => "flacofy",
+            "password" => "flacofy534",
+            "sender" => "8809617620823",
+            "message" => 'Your OTP code is: ' . $otp,
+            "to" => '88' . $phone
         ]),
         'timeout' => 15,
     ]);

@@ -1,6 +1,6 @@
 <?php
 /**
- * Template Name: verify otp
+ * Template Name: Verify Otp (dev)
  */
 $otp_result = handle_otp_verification();
 

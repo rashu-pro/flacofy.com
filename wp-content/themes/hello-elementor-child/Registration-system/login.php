@@ -1,6 +1,6 @@
 <?php
 /**
- * Template Name: Login
+ * Template Name: Login (dev)
  */
 
 // Handle login if form was submitted

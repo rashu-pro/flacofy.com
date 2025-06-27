@@ -1,6 +1,6 @@
 <?php
 /**
- * Template Name: Registration
+ * Template Name: Registration (dev)
  */
 if (session_status() === PHP_SESSION_NONE) {
     session_start();

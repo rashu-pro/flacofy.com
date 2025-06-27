@@ -4,10 +4,24 @@
  * @return string[]|void
  */
 function handle_custom_login() {
+    global $wp_rate_limiter;
+
     $error_message = '';
     $success_message = '';
 
     if (isset($_POST['custom_login_submit'])) {
+        // Check rate limit (5 attempts per 15 minutes)
+        $rate_check = $wp_rate_limiter->is_rate_limited('login', 3, 900);
+
+        if ($rate_check['blocked']) {
+            return array(
+                'error' => $rate_check['message'] . ' Try again in ' . ceil($rate_check['remaining_time'] / 60) . ' minutes.',
+                'rate_limited' => true
+            );
+        }
+        // Log the attempt
+        $wp_rate_limiter->log_attempt('login');
+
         // Verify nonce for security
         if (!wp_verify_nonce($_POST['login_nonce'], 'custom_login_nonce')) {
             $error_message = 'Security check failed. Please try again.';
@@ -54,6 +68,8 @@ function handle_custom_login() {
                 } else {
                     // Login successful
                     $success_message = 'Login successful! Redirecting...';
+                    // Success - reset rate limit
+                    $wp_rate_limiter->reset_attempts('login');
 
                     // Redirect to dashboard or intended page
                     $redirect_url = isset($_POST['redirect_to']) ? $_POST['redirect_to'] : admin_url();

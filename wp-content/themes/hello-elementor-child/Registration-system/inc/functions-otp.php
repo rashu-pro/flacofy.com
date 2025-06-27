@@ -58,5 +58,50 @@ function send_otp_to_phone($phone, $otp)
     return wp_remote_retrieve_body($response);
 }
 
+/**
+ * Send otp to email
+ * @param $email
+ * @param $otp
+ * @return bool
+ */
+function send_otp_to_email($email, $otp)
+{
+    $to = $email;
+    $subject = 'Your OTP Verification Code From FLACOFY';
+    $message = '
+    <html>
+    <head>
+        <title>OTP Verification</title>
+    </head>
+    <body>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #333;">OTP Verification for Registration to FLACOFY</h2>
+            <p style="font-size: 16px; color: #666;">Your OTP verification code is:</p>
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px;">
+                <h1 style="color: #007cba; font-size: 32px; margin: 0; letter-spacing: 5px;">' . $otp . '</h1>
+            </div>
+            <p style="font-size: 14px; color: #666;">This code will expire in 5 minutes. Do not share this code with anyone.</p>
+            <p style="font-size: 12px; color: #999;">If you did not request this code, please ignore this email.</p>
+        </div>
+    </body>
+    </html>
+    ';
+
+    // Set content type to send HTML email
+    $headers = array(
+        'Content-Type: text/html; charset=UTF-8',
+    );
+
+    $sent = wp_mail($to, $subject, $message, $headers);
+
+    if (!$sent) {
+        error_log('Email OTP sending failed for: ' . $email);
+        return false;
+    }
+
+    return true;
+}
+
+
 
 

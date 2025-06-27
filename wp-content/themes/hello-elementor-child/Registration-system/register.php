@@ -77,8 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     // Send OTP
                     if ($is_email) {
-                        require_once 'send_email_otp.php';
-                        sendEmailOtp($contact, $otp);
+                        send_otp_to_email($contact, $otp);
                     } else {
                         send_otp_to_phone($contact, $otp);
                     }

@@ -1,14 +1,14 @@
 <?php
 /**
- * Template Name: Reset Password
+ * Template Name: Reset Password (dev)
  */
 session_start();
-require 'config.php';
-
-if (!isset($_SESSION['otp_verified']) || !isset($_SESSION['reset_contact'])) {
-    header("Location: /");
-    exit();
-}
+//
+//if (!isset($_SESSION['otp_verified']) || !isset($_SESSION['reset_contact'])) {
+//    header("Location: /");
+//    exit();
+//}
+var_dump($_SESSION);
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

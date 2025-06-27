@@ -231,7 +231,8 @@ function handle_otp_verification() {
                 return array(
                     'success' => 'OTP verified successfully!',
                     'verified' => true,
-                    'redirect' => home_url('/reset-password')
+                    'auto_login' => true,
+                    'redirect' => home_url('/reset-password/')
                 );
             }
 
@@ -247,3 +248,98 @@ function handle_otp_verification() {
         'cooldown' => $cooldown_seconds
     );
 }
+
+/**
+ * Handler for forgot_password submit action
+ * @return array|string[]|void
+ * @throws Exception
+ */
+function handle_forgot_password() {
+    global $wp_rate_limiter, $wpdb;
+
+    $error_message = '';
+    $success_message = '';
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['forgot_password_submit'])) {
+        // Start session if not already started
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        // ✅ Rate limit (3 attempts per 5 minutes)
+        $rate_check = $wp_rate_limiter->is_rate_limited('forgot_password', 3, 60);
+        if ($rate_check['blocked']) {
+            return [
+                'error' => $rate_check['message'] . ' Try again in ' . ceil($rate_check['remaining_time'] / 60) . ' minutes.',
+                'rate_limited' => true
+            ];
+        }
+
+        $wp_rate_limiter->log_attempt('forgot_password');
+
+        // ✅ CSRF validation
+        if (!isset($_POST['forgot_password_nonce']) || !wp_verify_nonce($_POST['forgot_password_nonce'], 'forgot_password_action')) {
+            return ['error' => 'Invalid request. Please refresh the page and try again.'];
+        }
+
+        // ✅ Sanitize input
+        $contact = sanitize_text_field($_POST['contact'] ?? '');
+
+        if (empty($contact)) {
+            return ['error' => 'Please enter your phone number or email!'];
+        }
+
+        // Determine contact type
+        $is_phone = preg_match('/^01[3-9]\d{8}$/', $contact);
+        $is_email = is_email($contact);
+
+        if (!$is_phone && !$is_email) {
+            return ['error' => 'Invalid phone number or email address!'];
+        }
+
+        // Check if user exists using WP API
+        $user = $is_email ? get_user_by('email', $contact) : get_user_by('meta_value', $contact); // assumes phone stored in usermeta
+        if (!$user) {
+            return ['error' => 'No account found with this contact!'];
+        }
+
+        $field = $is_email ? 'email' : 'phone';
+
+        // 🔐 OTP Table (assuming 'wp_otps')
+        $table = $wpdb->prefix . 'reg_system_otps';
+
+        // Delete any previous OTP for this contact
+        $wpdb->delete($table, [$field => $contact]);
+
+        // Generate new OTP
+        $otp = generate_otp($field, $contact, '120');
+
+        if (!$otp) {
+            error_log("Failed to insert OTP for $contact");
+            return ['error' => 'Failed to send OTP. Please try again later.'];
+        }
+
+        if (isset($_SESSION['reg_data'])) {
+            unset($_SESSION['reg_data']);
+        }
+        // ✅ Store reset context
+        $_SESSION['reset_contact'] = $contact;
+
+        // 📤 Send OTP
+        if ($is_email) {
+            send_otp_to_email($contact, $otp);
+        } else {
+            send_otp_to_phone($contact, $otp);
+        }
+
+        // ✅ Redirect
+        wp_redirect(home_url('/otp-verification/'));
+        exit;
+    }
+
+    return [
+        'error' => $error_message,
+        'success' => $success_message
+    ];
+}
+

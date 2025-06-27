@@ -217,8 +217,7 @@ $cooldown_seconds = 120;
                 <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
                 <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
             </div>
-
-            <button type="submit" name="verify" class="btn btn-primary btn-submit">Submit</button>
+                <button type="submit" name="verify" class="btn btn-primary btn-submit">Submit</button>
         </form>
 
         <div class="resend-container">

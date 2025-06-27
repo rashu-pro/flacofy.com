@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Generate OTP and expiration time
                     $otp = random_int(100000, 999999);
                     $expires_at = current_time('mysql', 1); // GMT
-                    $expires_at = date('Y-m-d H:i:s', strtotime($expires_at) + 300); // +5 mins
+                    $expires_at = date('Y-m-d H:i:s', strtotime($expires_at) + 120); // +5 mins
 
                     $field = $is_phone ? 'phone' : 'email';
                     $table_name = $wpdb->prefix . 'reg_system_otps';

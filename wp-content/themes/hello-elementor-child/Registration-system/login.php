@@ -268,7 +268,7 @@ if (is_user_logged_in()) {
             </div>
 
             <div class="forgot-link">
-                <a href="https://flacofy.com/forget_password/">Forgot Password?</a>
+                <a href="<?php echo esc_url(home_url('/forget-password/')) ?>">Forgot Password?</a>
             </div>
 
             <input type="hidden" name="redirect_to" value="<?php echo esc_url(home_url('/my-account/')); ?>">

@@ -2,37 +2,10 @@
 /**
  * Template Name: Reset Password (dev)
  */
-session_start();
-//
-//if (!isset($_SESSION['otp_verified']) || !isset($_SESSION['reset_contact'])) {
-//    header("Location: /");
-//    exit();
-//}
-var_dump($_SESSION);
-
-$error = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $password = $_POST['password'];
-    $confirm = $_POST['confirm_password'];
-
-    if ($password !== $confirm || strlen($password) < 6) {
-        $error = "Passwords do not match or too short.";
-    } else {
-        $contact = $_SESSION['reset_contact'];
-        $hashed = password_hash($password, PASSWORD_DEFAULT);
-        $type = filter_var($contact, FILTER_VALIDATE_EMAIL) ? 'email' : 'phone';
-
-        $stmt = $conn->prepare("UPDATE users SET password = ? WHERE $type = ?");
-        $stmt->bind_param("ss", $hashed, $contact);
-        if ($stmt->execute()) {
-            unset($_SESSION['otp_verified'], $_SESSION['reset_contact']);
-            header("Location: /login"); // or wherever login is
-            exit();
-        } else {
-            $error = "Failed to reset password.";
-        }
-    }
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
+$reset_password_result = handle_custom_reset_password();
 ?>
 <!DOCTYPE html>
 <html>
@@ -46,20 +19,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="card-body">
             <h4 class="card-title mb-4">Set New Password</h4>
 
-            <?php if ($error): ?>
-                <div class="alert alert-danger"><?= $error ?></div>
+            <?php
+            global $wp_rate_limiter;
+            $rate_check = $wp_rate_limiter->is_rate_limited('reset_password', 3, 60);
+            ?>
+
+            <?php if (!empty($reset_password_result['error'])): ?>
+                <div class="alert alert-danger">
+                    <?php echo esc_html($reset_password_result['error']); ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($reset_password_result['success'])): ?>
+                <div class="alert alert-success">
+                    <?php echo $reset_password_result['success']; ?>
+                </div>
             <?php endif; ?>
 
             <form method="POST">
+                <?php wp_nonce_field('reset_password_action', 'reset_password_nonce'); ?>
                 <div class="mb-3">
                     <label for="password" class="form-label">New Password</label>
-                    <input type="password" name="password" class="form-control" required minlength="6">
+                    <input type="password" name="new_password" class="form-control" required minlength="6">
                 </div>
                 <div class="mb-3">
                     <label for="confirm_password" class="form-label">Confirm Password</label>
                     <input type="password" name="confirm_password" class="form-control" required minlength="6">
                 </div>
-                <button type="submit" class="btn btn-success w-100">Reset Password</button>
+                <input type="hidden" value="<?php echo $_SESSION['reset_contact'] ?>" name="contact">
+                <button type="submit" name="reset_password_submit" class="btn btn-success w-100">Reset Password</button>
             </form>
         </div>
     </div>

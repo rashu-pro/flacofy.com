@@ -57,7 +57,7 @@ $forgot_result = handle_forgot_password();
         <?php endif; ?>
 
         <?php if (!empty($success)): ?>
-            <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
+            <div class="alert alert-success"><?= htmlspecialchars($forgot_result['success']) ?></div>
         <?php endif; ?>
 
         <form method="POST">

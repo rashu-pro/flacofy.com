@@ -229,7 +229,7 @@ function handle_otp_verification() {
                 $wp_rate_limiter->reset_attempts('otp_verification');
 
                 return array(
-                    'success' => 'OTP verified successfully!',
+                    'success' => 'OTP verified successfully. You are being redirected to reset password page to setup a new password.',
                     'verified' => true,
                     'auto_login' => true,
                     'redirect' => home_url('/reset-password/')
@@ -298,7 +298,7 @@ function handle_forgot_password() {
         }
 
         // Check if user exists using WP API
-        $user = $is_email ? get_user_by('email', $contact) : get_user_by('meta_value', $contact); // assumes phone stored in usermeta
+        $user = $is_email ? get_user_by('email', $contact) : get_user_by('login', $contact); // assumes phone stored in usermeta
         if (!$user) {
             return ['error' => 'No account found with this contact!'];
         }
@@ -342,4 +342,74 @@ function handle_forgot_password() {
         'success' => $success_message
     ];
 }
+
+/**
+ * Handler for reset password
+ * @return array|string[]
+ */
+function handle_custom_reset_password() {
+    global $wp_rate_limiter;
+
+    $error_message = '';
+    $success_message = '';
+
+    if (isset($_POST['reset_password_submit'])) {
+        // Rate limit: 3 attempts per 10 minutes (adjust as needed)
+        $rate_check = $wp_rate_limiter->is_rate_limited('reset_password', 3, 60);
+
+        if ($rate_check['blocked']) {
+            return array(
+                'error' => $rate_check['message'] . ' Try again in ' . ceil($rate_check['remaining_time'] / 60) . ' minutes.',
+                'rate_limited' => true
+            );
+        }
+
+        // Log the attempt
+        $wp_rate_limiter->log_attempt('reset_password');
+
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['reset_password_nonce'], 'reset_password_action')) {
+            $error_message = 'Security check failed. Please try again.';
+        } else {
+            // Get data
+            $user_identifier = sanitize_text_field($_POST['contact']);
+            $password = $_POST['new_password'] ?? '';
+            $confirm = $_POST['confirm_password'] ?? '';
+
+            // Find user by email or username
+            $user = is_email($user_identifier)
+                ? get_user_by('email', $user_identifier)
+                : get_user_by('login', $user_identifier);
+
+            if (!$user) {
+                $error_message = 'User not found.';
+            } elseif (empty($password) || empty($confirm)) {
+                $error_message = 'Please enter both password fields.';
+            } elseif ($password !== $confirm) {
+                $error_message = 'Passwords do not match.';
+            } elseif (strlen($password) < 6) {
+                $error_message = 'Password must be at least 6 characters.';
+            } else {
+                // Set new password
+                wp_set_password($password, $user->ID);
+
+                // Optionally reset login attempts
+                $wp_rate_limiter->reset_attempts('reset_password');
+
+                // Clear session if used
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    unset($_SESSION['reset_contact']);
+                }
+
+                $success_message = 'Password has been reset successfully. <a href="' . home_url('/login/') . '">Login Here</a>';
+            }
+        }
+    }
+
+    return array(
+        'error' => $error_message,
+        'success' => $success_message
+    );
+}
+
 
